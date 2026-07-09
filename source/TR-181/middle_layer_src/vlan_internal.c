@@ -48,6 +48,7 @@
 #define PSM_VLANMANAGER_CFG_REGION "dmsb.vlanmanager.cfg.%d.region"
 #define PSM_VLANMANAGER_CFG_VLANID "dmsb.vlanmanager.cfg.%d.vlanid"
 #define PSM_VLANMANAGER_CFG_TPID   "dmsb.vlanmanager.cfg.%d.tpid"
+#define PSM_VLANMANAGER_CFG_MACVLAN "dmsb.vlanmanager.cfg.%d.macvlan"
 
 extern char                     g_Subsystem[32];
 extern ANSC_HANDLE              bus_handle;
@@ -278,6 +279,15 @@ static ANSC_STATUS VlanTerminationInitialize( ANSC_HANDLE hThisObject)
                 pVlan[nIndex].TPId = atoi(acPSMValue) ;
             }
 
+            /* get macvlan from psm */
+            memset(acPSMQuery, 0, sizeof(acPSMQuery));
+            memset(acPSMValue, 0, sizeof(acPSMValue));
+            snprintf( acPSMQuery, sizeof( acPSMQuery ), PSM_VLANMANAGER_CFG_MACVLAN, (vlanCfgIndexes[nIndex] + 1) );
+            if ( CCSP_SUCCESS == DmlVlanGetPSMRecordValue( acPSMQuery, acPSMValue ) )
+            {
+                pVlan[nIndex].MacVlanEnable = (UINT)strtoul(acPSMValue, NULL, 10);
+            }
+
             /*TODO:
              *Need to be Removed Path From PSM Once RBUS Support Available in VlanManager and WanManager.
              */
@@ -375,6 +385,13 @@ static ANSC_STATUS VlanTerminationInitialize( ANSC_HANDLE hThisObject)
         if ( CCSP_SUCCESS == DmlVlanGetPSMRecordValue( acPSMQuery, acPSMValue ) )
         {
              pVlan[nIndex].TPId = atoi(acPSMValue) ;
+        }
+
+        /* get macvlan from psm */
+        snprintf( acPSMQuery, sizeof( acPSMQuery ), PSM_VLANMANAGER_MACVLAN, nIndex + 1 );
+        if ( CCSP_SUCCESS == DmlVlanGetPSMRecordValue( acPSMQuery, acPSMValue ) )
+        {
+             pVlan[nIndex].MacVlanEnable = (UINT)strtoul(acPSMValue, NULL, 10) ;
         }
 
         /* get base interface from psm */

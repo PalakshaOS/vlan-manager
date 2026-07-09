@@ -360,6 +360,11 @@ Vlan_GetParamUlongValue
         *puLong = p_Vlan->TPId;
         return TRUE;
     }
+    if (strcmp(ParamName, "MACVLAN") == 0)
+    {
+        *puLong = p_Vlan->MacVlanEnable;
+        return TRUE;
+    }
     /* CcspTraceWarning(("Unsupported parameter '%s'\n", ParamName)); */
     return FALSE;
 }
@@ -627,6 +632,12 @@ Vlan_SetParamUlongValue
         p_Vlan->TPId = uValue;
         return TRUE;
     }
+    if (strcmp(ParamName, "MACVLAN") == 0)
+    {
+        p_Vlan->MacVlanEnable = uValue;
+        return TRUE;
+    }
+
 
     /* CcspTraceWarning(("Unsupported parameter '%s'\n", ParamName)); */
     return FALSE;

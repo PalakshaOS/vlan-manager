@@ -361,7 +361,7 @@ void * Vlan_Disable(void *Arg)
 
     pthread_mutex_lock(&vlan_access_mutex);
     //Set EthLink to False. it will take care UnTagged Created Vlan Interface
-    if (Vlan_SetEthLink(pEntry, FALSE, FALSE) == ANSC_STATUS_FAILURE)
+    if (pEntry->MacVlanEnable != MACVLAN_DISABLED && Vlan_SetEthLink(pEntry, FALSE, FALSE) == ANSC_STATUS_FAILURE)
     {
         CcspTraceError(("%s-%d: Failed to Enable EthLink\n", __FUNCTION__, __LINE__));
     }
@@ -402,6 +402,22 @@ void * Vlan_Disable(void *Arg)
         Vlan_DeleteInterface(pEntry);
 #endif
     }
+#if !defined(VLAN_MANAGER_HAL_ENABLED)
+    else if(pEntry->VLANId == -1 && pEntry->MacVlanEnable == MACVLAN_DISABLED)
+    {
+        /* If the VLANID = -1, delete the OVS bridge and remove the interface */
+        if (strcmp(pEntry->BaseInterface, pEntry->Name))
+        {
+            if (pEntry->BaseInterface[0] != '\0')
+            {
+                v_secure_system("brctl delif %s %s", pEntry->Name, pEntry->BaseInterface);
+            }
+            v_secure_system("ifconfig %s down", pEntry->Name);
+            v_secure_system("brctl delbr %s", pEntry->Name);
+        }
+
+    }
+#endif
     pEntry->Status = VLAN_IF_DOWN;
     EthLink_SendVirtualIfaceVlanStatus(pEntry->Path, "Down");
     CcspTraceInfo(("%s - %s:Successfully deleted VLAN interface %s\n", __FUNCTION__, VLAN_MARKER_VLAN_IF_CREATE, pEntry->Name));
@@ -590,6 +606,35 @@ static ANSC_STATUS Vlan_CreateTaggedInterface(PDML_VLAN pEntry)
 }
 #endif
 
+#if !defined(VLAN_MANAGER_HAL_ENABLED)
+static ANSC_STATUS Vlan_CreateUnTaggedInterface(PDML_VLAN pEntry)
+{
+    ANSC_STATUS returnStatus = ANSC_STATUS_SUCCESS;
+
+    if (pEntry == NULL)
+    {
+        CcspTraceError(("%s-%d: Failed to Create UnTagged Vlan Interface\n", __FUNCTION__, __LINE__));
+        return ANSC_STATUS_FAILURE;
+    }
+
+    /* If the VLANID = -1, create an OVS bridge and add the interface */
+    if(strcmp(pEntry->BaseInterface, pEntry->Name))
+    {
+        v_secure_system("ip link show %s > /dev/null 2>&1 || brctl addbr %s", pEntry->Name, pEntry->Name);
+        v_secure_system("brctl addif %s %s 2>/dev/null", pEntry->Name, pEntry->BaseInterface);
+        v_secure_system("ifconfig %s up", pEntry->Name);
+
+        if (Vlan_SetMacAddr(pEntry) == ANSC_STATUS_FAILURE)
+        {
+            CcspTraceError(("%s Failed to Set MacAddress \n", __FUNCTION__));
+            return ANSC_STATUS_FAILURE;
+        }
+    }
+    return returnStatus;
+}
+#endif
+
+
 void * Vlan_Enable(void *Arg)
 {
     ANSC_STATUS returnStatus  = ANSC_STATUS_SUCCESS;
@@ -607,7 +652,7 @@ void * Vlan_Enable(void *Arg)
 
     pthread_mutex_lock(&vlan_access_mutex);
     //Create Vlan Tagged Interface
-    if(pEntry->VLANId > 0) {
+    if(pEntry->VLANId > 0 || (pEntry->VLANId == -1 && pEntry->MacVlanEnable == MACVLAN_DISABLED)) {
         if (Vlan_SetEthLink(pEntry, TRUE, TRUE) == ANSC_STATUS_FAILURE)
         {
             CcspTraceError(("%s-%d: Failed to Enable EthLink\n", __FUNCTION__, __LINE__));
@@ -617,25 +662,49 @@ void * Vlan_Enable(void *Arg)
         {
             CcspTraceError(("[%s][%d]Failed to get vlan interface status \n", __FUNCTION__, __LINE__));
         }
-#if defined(VLAN_MANAGER_HAL_ENABLED)
         if ( ( status != VLAN_IF_NOTPRESENT ) && ( status != VLAN_IF_ERROR ) )
         {
             CcspTraceInfo(("%s %s:VLAN interface(%s) already exists, delete it first\n", __FUNCTION__, VLAN_MARKER_VLAN_IF_CREATE, pEntry->Name));
+#if defined(VLAN_MANAGER_HAL_ENABLED)
             returnStatus = vlan_eth_hal_deleteInterface(pEntry->Name, pEntry->InstanceNumber);
             if (ANSC_STATUS_SUCCESS != returnStatus)
             {
                 CcspTraceError(("%s - Failed to delete the existing VLAN interface %s\n", __FUNCTION__, pEntry->Name));
             }
-            CcspTraceInfo(("%s - %s:Successfully deleted VLAN interface %s\n", __FUNCTION__, VLAN_MARKER_VLAN_IF_DELETE, pEntry->Name));
-        }
+            else
+#else
+            {
+                v_secure_system("ip link set %s down", pEntry->Name);
+                v_secure_system("ip link delete %s",pEntry->Name);
+            }
 #endif
-        returnStatus = Vlan_CreateTaggedInterface(pEntry);
-        if (ANSC_STATUS_SUCCESS != returnStatus)
-        {
-            pEntry->Status = VLAN_IF_ERROR;
-            CcspTraceError(("[%s][%d]Failed to create VLAN Tagged interface \n", __FUNCTION__, __LINE__));
+            {
+                CcspTraceInfo(("%s - %s:Successfully deleted VLAN interface %s\n", __FUNCTION__, VLAN_MARKER_VLAN_IF_DELETE, pEntry->Name));
+            }
         }
 
+#if !defined(VLAN_MANAGER_HAL_ENABLED)
+        if(pEntry->VLANId > 0)
+        {
+#endif
+            returnStatus = Vlan_CreateTaggedInterface(pEntry);
+            if (ANSC_STATUS_SUCCESS != returnStatus)
+            {
+                pEntry->Status = VLAN_IF_ERROR;
+                CcspTraceError(("[%s][%d]Failed to create VLAN Tagged interface \n", __FUNCTION__, __LINE__));
+            }
+#if !defined(VLAN_MANAGER_HAL_ENABLED)
+        }
+        else
+        {
+            returnStatus = Vlan_CreateUnTaggedInterface(pEntry);
+            if (ANSC_STATUS_SUCCESS != returnStatus)
+            {
+                pEntry->Status = VLAN_IF_ERROR;
+                CcspTraceError(("[%s][%d]Failed to create VLAN UnTagged interface \n", __FUNCTION__, __LINE__));
+            }
+        }
+#endif
         //Get status of VLAN link
         while(iIterator < 10)
         {

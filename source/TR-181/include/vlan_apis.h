@@ -50,6 +50,7 @@
 #define PSM_VLANMANAGER_LOWERLAYERS       "dmsb.vlanmanager.%d.lowerlayers"
 #define PSM_VLANMANAGER_VLANID            "dmsb.vlanmanager.%d.vlanid"
 #define PSM_VLANMANAGER_TPID              "dmsb.vlanmanager.%d.tpid"
+#define PSM_VLANMANAGER_MACVLAN           "dmsb.vlanmanager.%d.macvlan"
 #define PSM_VLANMANAGER_BASEINTERFACE     "dmsb.vlanmanager.%d.baseinterface"
 #define PSM_VLANMANAGER_PATH              "dmsb.vlanmanager.%d.path"
 
@@ -75,6 +76,13 @@ typedef enum {
     VLAN_IF_ERROR
 }vlan_link_status_e;
 
+typedef enum macVlan_status
+{
+    MACVLAN_DISABLED = 0,
+    MACVLAN_PRIVATE  = 1,
+    MACVLAN_PUBLIC   = 2
+}macVlan_status_t;
+
 typedef  struct
 _DML_VLAN
 {
@@ -88,6 +96,7 @@ _DML_VLAN
     CHAR                 BaseInterface[64];
     INT                  VLANId;
     UINT                 TPId;
+    macVlan_status_t     MacVlanEnable;
     CHAR                 Path[1024];
 }
 DML_VLAN,  *PDML_VLAN;
@@ -96,6 +105,7 @@ static inline void DML_VLAN_INIT(PDML_VLAN pVlan)
 {
     pVlan->Enable            = FALSE;
     pVlan->Status            = VLAN_IF_DOWN;
+    pVlan->MacVlanEnable     = MACVLAN_DISABLED;
 }
 
 /*************************************
